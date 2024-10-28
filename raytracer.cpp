@@ -365,7 +365,7 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
 int minSphereI, minTriangleI, minMeshI;
 vec3f computeColor (ray myRay, int depth) {
 
-    if (depth<=0) return backgroundColor;
+    if (depth<=0) return {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
 
     int i;
     vec3f c;
@@ -375,7 +375,9 @@ vec3f computeColor (ray myRay, int depth) {
     float t_sphere, t_triangle, t_mesh;
     vec3f L, N, P;
 
-    c = backgroundColor;
+    c = {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
+    // printf("c: %f, background color: %d\n", c.x, scene.background_color.x);
+
     minSphereI = -1;
     minTriangleI = -1;
     minMeshI = -1;
@@ -467,6 +469,7 @@ vec3f computeColor (ray myRay, int depth) {
 
         c = calculateColor(mesh.material_id, P, N, myRay, depth);
     }
+    // printf(" asagida c: %f, background color: %d\n", c.x, scene.background_color.x);
 
     return c;
 }
