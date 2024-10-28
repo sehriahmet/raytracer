@@ -31,6 +31,8 @@ typedef struct {
     vec3f origin, direction;
 } ray;
 
+vec3f computeColor(ray r, int depth);
+
 // burada ilk camera elementini aldim ama birden fazl aoldugu case'i sonradan yapmak lazim
 // Main function or initialization section
 
@@ -304,7 +306,7 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
 
 // TO-DO: birden fazla isik kaynagi ve kamera gibi islemler de hallledilmeli
 // Phong shading function
-vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
+vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray myRay, int depth) {
     vec3f color = {0, 0, 0};
     
     Material material = scene.materials[materialId-1];
@@ -328,15 +330,15 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
         vec3f L = normalize(substractVectorsf(light.position, intersectionPoint)); // Incoming light direction
         float distance = length(substractVectorsf(light.position, intersectionPoint)); // Distance to light
         float cosThetaPrime = fmax(0.0, dot(L, normal)); // Cosine of the angle between light direction and normal
-        float diffuse = (material.diffuse.x * cosThetaPrime * light.intensity.x) / (distance * distance) / 255;
+        // float diffuse = (material.diffuse.x * cosThetaPrime * light.intensity.x) / (distance * distance) / 255;
         vec3f received_irradience;
         received_irradience.x = light.intensity.x / (distance * distance);
         received_irradience.y = light.intensity.y / (distance * distance);
         received_irradience.z = light.intensity.z / (distance * distance);
 
         color.x += material.diffuse.x * cosThetaPrime * received_irradience.x / 255;
-        color.y += material.diffuse.y * cosThetaPrime * received_irradience.x / 255;
-        color.z += material.diffuse.z * cosThetaPrime * received_irradience.x / 255;
+        color.y += material.diffuse.y * cosThetaPrime * received_irradience.y / 255;
+        color.z += material.diffuse.z * cosThetaPrime * received_irradience.z / 255;
 
         // Specular component
         vec3f w0 = normalize(substractVectorsf(scene.cameras[0].position, intersectionPoint));
@@ -352,6 +354,24 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
 
     }
 
+    // reflect ray baslangic konumu ilk nokta
+
+    if (material.is_mirror) {
+        vec3f reflectionDir = substractVectorsf(myRay.direction, multiplicationScalarf(normal, 2 * dot(myRay.direction, normal)));
+        reflectionDir = normalize(reflectionDir);
+
+        ray reflectionRay;
+        reflectionRay.origin = addVectorsf(intersectionPoint, multiplicationScalarf(reflectionDir, scene.shadow_ray_epsilon));
+        reflectionRay.direction = reflectionDir;
+
+        
+        vec3f reflectedColor = computeColor(reflectionRay, depth-1);
+
+        color.x += material.mirror.x * reflectedColor.x / 255;
+        color.y += material.mirror.y * reflectedColor.y / 255;
+        color.z += material.mirror.z * reflectedColor.z / 255;
+    }
+
     // range is in 0, 1
     color.x = std::min(1.0f, std::max(0.0f, color.x));
     color.y = std::min(1.0f, std::max(0.0f, color.y));
@@ -361,7 +381,10 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
 }
 
 int minSphereI, minTriangleI, minMeshI;
-vec3f computeColor (ray myRay) {
+vec3f computeColor (ray myRay, int depth) {
+
+    if (depth<=0) return backgroundColor;
+
     int i;
     vec3f c;
     float minT_sphere = 90000; // some large number
@@ -423,7 +446,7 @@ vec3f computeColor (ray myRay) {
         vec3f N = substractVectorsf(P, scene.vertex_data[sphere.center_vertex_id-1]);
         N = normalize(N);
 
-        c = calculateColor(sphere.material_id, P, N);
+        c = calculateColor(sphere.material_id, P, N, myRay, depth);
     }
     
     else if (minTriangleI != -1 && (minT_triangle < minT_mesh || minMeshI == -1)) {
@@ -441,7 +464,7 @@ vec3f computeColor (ray myRay) {
         vec3f edge2 = substractVectorsf(v2, v0);
         N = normalize(cross(edge1, edge2));
 
-        c = calculateColor(triangle.material_id, P, N);
+        c = calculateColor(triangle.material_id, P, N, myRay, depth);
     }
 
     else if (minMeshI != -1) {
@@ -460,7 +483,7 @@ vec3f computeColor (ray myRay) {
         vec3f edge2 = substractVectorsf(v2, v0);
         N = normalize(cross(edge1, edge2));
 
-        c = calculateColor(mesh.material_id, P, N);
+        c = calculateColor(mesh.material_id, P, N, myRay, depth);
     }
 
     return c;
@@ -491,7 +514,7 @@ int main(int argc, char* argv[])
             pixel = addVectorsf(generatedRay.origin, generatedRay.direction);
             
             vec3f rayColor;
-            rayColor = computeColor(generatedRay);
+            rayColor = computeColor(generatedRay, scene.max_recursion_depth);
             // if (rayColor.x > 0.0) printf("raycolors: %f %f %f \n", rayColor.x, rayColor.y, rayColor.z);
             
             image[countPixel++] = (int)(rayColor.x*255+0.5);
