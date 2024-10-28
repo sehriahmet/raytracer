@@ -367,9 +367,9 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
         
         vec3f reflectedColor = computeColor(reflectionRay, depth-1);
 
-        color.x += material.mirror.x * reflectedColor.x / 255;
-        color.y += material.mirror.y * reflectedColor.y / 255;
-        color.z += material.mirror.z * reflectedColor.z / 255;
+        color.x += material.mirror.x * reflectedColor.x;
+        color.y += material.mirror.y * reflectedColor.y;
+        color.z += material.mirror.z * reflectedColor.z;
     }
 
     // range is in 0, 1
