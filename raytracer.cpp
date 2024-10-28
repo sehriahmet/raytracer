@@ -201,8 +201,6 @@ float intersectSphere (ray r, Sphere s) {
     return t;
 }
 
-// TO-DO: intersectTriangle !
-
 float intersectTriangle(ray r, Triangle intersectedTriangle) {
     // Retrieve the triangle vertices from the scene's vertex data
     vec3f v0 = scene.vertex_data[intersectedTriangle.indices.v0_id - 1];
@@ -252,7 +250,7 @@ float intersectTriangle(ray r, Triangle intersectedTriangle) {
     }
 }
 
-// mesh icin intersect fonksiyonu triangle'lari kullanarak bulunuyor
+// this intersect mesh function uses intersect triangle function also
 float intersectMesh(ray r, Mesh mesh) {
     float closestT = -1;
     for (int i = 0; i < mesh.faces.size(); ++i) {
@@ -276,7 +274,7 @@ float intersectMesh(ray r, Mesh mesh) {
 
 // TO-DO: birden fazla isik kaynagi ve kamera gibi islemler de hallledilmeli
 
-// TO-DO: in case of some bugs, this shadow function should be checked because it is setting 0 to color if in the shadow 
+// TO-DO: in case of some bugs, this shadow function should be checked because it is setting color to 0 if in the shadow 
 // shadow part
 bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
     vec3f shadowRay = substractVectorsf(lightPosition, intersectionPoint);
@@ -293,6 +291,20 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
             return true; 
         }
     }
+    for (int i = 0; i < scene.triangles.size(); i++) {
+        float t = intersectTriangle(shadowRayStruct, scene.triangles[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
+    for (int i = 0; i < scene.meshes.size(); i++) {
+        float t = intersectMesh(shadowRayStruct, scene.meshes[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
     return false;
 }
 
