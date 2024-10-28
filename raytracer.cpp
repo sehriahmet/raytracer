@@ -284,6 +284,21 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
             return true; 
         }
     }
+
+    for (int i = 0; i < scene.triangles.size(); i++) {
+        float t = intersectTriangle(shadowRayStruct, scene.triangles[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
+    for (int i = 0; i < scene.meshes.size(); i++) {
+        float t = intersectMesh(shadowRayStruct, scene.meshes[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
     return false;
 }
 
