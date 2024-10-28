@@ -195,55 +195,39 @@ float intersectSphere (ray r, Sphere s) {
     return t;
 }
 
-// TO-DO: intersectTriangle !
-
+// Function to check intersection of a ray with a triangle using barycentric coordinates
 float intersectTriangle(ray r, Triangle intersectedTriangle) {
-    // Retrieve the triangle vertices from the scene's vertex data
+    // Retrieve triangle vertices from the scene's vertex data
     vec3f v0 = scene.vertex_data[intersectedTriangle.indices.v0_id - 1];
     vec3f v1 = scene.vertex_data[intersectedTriangle.indices.v1_id - 1];
     vec3f v2 = scene.vertex_data[intersectedTriangle.indices.v2_id - 1];
 
-    // Calculate two edges of the triangle
+    // Calculate the edges of the triangle
     vec3f edge1 = substractVectorsf(v1, v0);
     vec3f edge2 = substractVectorsf(v2, v0);
 
-    // Begin calculating the determinant
+    // Calculate the normal and determinant for the plane intersection
     vec3f h = cross(r.direction, edge2);
     float a = dot(edge1, h);
 
-    // If the determinant is close to 0, the ray lies in the plane of the triangle
-    if (a > -1e-5 && a < 1e-5) {
-        return -1; // No intersection, the ray is parallel to the triangle
-    }
+    const float EPSILON = 1e-5;
+    if (fabs(a) < EPSILON) return -1; // Ray is parallel to the triangle
 
-    // Calculate the inverse determinant
+    // Calculate f, s, u, v
     float f = 1.0 / a;
     vec3f s = substractVectorsf(r.origin, v0);
     float u = f * dot(s, h);
+    if (u < 0.0 || u > 1.0) return -1; // Intersection outside the triangle
 
-    // Check if the intersection lies outside the triangle
-    if (u < 0.0 || u > 1.0) {
-        return -1; // No intersection
-    }
-
-    // Calculate the second barycentric coordinate
     vec3f q = cross(s, edge1);
     float v = f * dot(r.direction, q);
+    if (v < 0.0 || u + v > 1.0) return -1; // Intersection outside the triangle
 
-    // Check if the intersection lies outside the triangle
-    if (v < 0.0 || u + v > 1.0) {
-        return -1; // No intersection
-    }
-
-    // At this stage, we can compute t to find where the intersection point is on the line
+    // Calculate t to determine the intersection point distance
     float t = f * dot(edge2, q);
 
-    // If t is positive, then there is a valid intersection
-    if (t > 1e-5) {
-        return t; // Intersection point is at distance t along the ray
-    } else {
-        return -1; // No intersection
-    }
+    // Valid intersection if t is positive
+    return (t > EPSILON) ? t : -1;
 }
 
 // mesh icin intersect fonksiyonu triangle'lari kullanarak bulunuyor
@@ -251,9 +235,6 @@ float intersectMesh(ray r, Mesh mesh) {
     float closestT = -1;
     for (int i = 0; i < mesh.faces.size(); ++i) {
         Face indices = mesh.faces[i];
-        vec3f v0 = scene.vertex_data[indices.v0_id - 1];
-        vec3f v1 = scene.vertex_data[indices.v1_id - 1];
-        vec3f v2 = scene.vertex_data[indices.v2_id - 1];
 
         Triangle tri;
         tri.material_id = mesh.material_id;
@@ -304,7 +285,6 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
     return false;
 }
 
-// TO-DO: birden fazla isik kaynagi ve kamera gibi islemler de hallledilmeli
 // Phong shading function
 vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray myRay, int depth) {
     vec3f color = {0, 0, 0};
@@ -367,9 +347,11 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
         
         vec3f reflectedColor = computeColor(reflectionRay, depth-1);
 
-        color.x += material.mirror.x * reflectedColor.x;
-        color.y += material.mirror.y * reflectedColor.y;
-        color.z += material.mirror.z * reflectedColor.z;
+        if (reflectedColor.x <= 1 || reflectedColor.y <= 1 || reflectedColor.z <= 1){
+            color.x += material.mirror.x * reflectedColor.x;
+            color.y += material.mirror.y * reflectedColor.y;
+            color.z += material.mirror.z * reflectedColor.z;
+        }
     }
 
     // range is in 0, 1
@@ -383,7 +365,7 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
 int minSphereI, minTriangleI, minMeshI;
 vec3f computeColor (ray myRay, int depth) {
 
-    if (depth<=0) return backgroundColor;
+    if (depth<=0) return {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
 
     int i;
     vec3f c;
@@ -393,7 +375,9 @@ vec3f computeColor (ray myRay, int depth) {
     float t_sphere, t_triangle, t_mesh;
     vec3f L, N, P;
 
-    c = backgroundColor;
+    c = {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
+    // printf("c: %f, background color: %d\n", c.x, scene.background_color.x);
+
     minSphereI = -1;
     minTriangleI = -1;
     minMeshI = -1;
@@ -402,7 +386,7 @@ vec3f computeColor (ray myRay, int depth) {
 
         t_sphere = intersectSphere(myRay, scene.spheres[i]);
 
-        if (t_sphere<minT_sphere && t_sphere>=1) {
+        if (t_sphere<minT_sphere && t_sphere>=0.001) {
 
             Sphere sphere = scene.spheres[i];
 
@@ -414,7 +398,7 @@ vec3f computeColor (ray myRay, int depth) {
     for (i = 0; i < scene.triangles.size(); i++) {
         t_triangle = intersectTriangle(myRay, scene.triangles[i]);
 
-        if (t_triangle < minT_triangle && t_triangle >= 1) {
+        if (t_triangle < minT_triangle && t_triangle >= 0.001) {
             minT_triangle = t_triangle;
             minTriangleI = i;
         }
@@ -423,7 +407,7 @@ vec3f computeColor (ray myRay, int depth) {
     for (i = 0; i < scene.meshes.size(); i++) {
         t_mesh = intersectMesh(myRay, scene.meshes[i]);
 
-        if (t_mesh < minT_mesh && t_mesh >= 1) {
+        if (t_mesh < minT_mesh && t_mesh >= 0.001) {
             minT_mesh = t_mesh;
             minMeshI = i;
         }
@@ -485,6 +469,7 @@ vec3f computeColor (ray myRay, int depth) {
 
         c = calculateColor(mesh.material_id, P, N, myRay, depth);
     }
+    // printf(" asagida c: %f, background color: %d\n", c.x, scene.background_color.x);
 
     return c;
 }
@@ -526,6 +511,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    write_ppm("test.ppm", image, width, height);
+    write_ppm(scene.cameras[0].image_name.c_str(), image, width, height);
+    // write_ppm("test.ppm", image, width, height);
 
 }
