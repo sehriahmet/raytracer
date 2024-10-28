@@ -511,6 +511,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    write_ppm("test.ppm", image, width, height);
+    write_ppm(scene.cameras[0].image_name.c_str(), image, width, height);
+    // write_ppm("test.ppm", image, width, height);
 
 }
