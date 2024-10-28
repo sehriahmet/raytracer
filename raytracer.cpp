@@ -24,20 +24,12 @@ vec3f addVectorsf(vec3f a, vec3f b);
 vec3f cross(vec3f a, vec3f b);
 vec3f substractVectorsf(vec3f a, vec3f b);
 
-
 vec3f e;
 vec3f upVectoru, upVectorv, upVectorw;
 
 typedef struct {
     vec3f origin, direction;
 } ray;
-
-typedef struct {
-    int material_id;
-    int center_vertex_id;
-    float radius;
-} sphere;
-
 
 // burada ilk camera elementini aldim ama birden fazl aoldugu case'i sonradan yapmak lazim
 // Main function or initialization section
@@ -274,7 +266,6 @@ float intersectMesh(ray r, Mesh mesh) {
     return closestT;
 }
 
-// TO-DO: birden fazla isik kaynagi ve kamera gibi islemler de hallledilmeli
 
 // TO-DO: in case of some bugs, this shadow function should be checked because it is setting 0 to color if in the shadow 
 // shadow part
@@ -293,14 +284,29 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
             return true; 
         }
     }
+
+    for (int i = 0; i < scene.triangles.size(); i++) {
+        float t = intersectTriangle(shadowRayStruct, scene.triangles[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
+    for (int i = 0; i < scene.meshes.size(); i++) {
+        float t = intersectMesh(shadowRayStruct, scene.meshes[i]);
+        if (t > 0 && t < distanceToLight) {
+            return true; 
+        }
+    }
+
     return false;
 }
 
+// TO-DO: birden fazla isik kaynagi ve kamera gibi islemler de hallledilmeli
 // Phong shading function
 vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
     vec3f color = {0, 0, 0};
     
-    PointLight light = scene.point_lights[0]; // Assuming one light source
     Material material = scene.materials[materialId-1];
 
     vec3f ambientLight = scene.ambient_light;
@@ -310,38 +316,43 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal) {
     color.z += material.ambient.z * ambientLight.z / 255;
 
     // printf("ambientlight.x= %.2f\n", ambientLight.x);
+    PointLight light;
+    for (int i = 0; i < scene.point_lights.size(); i++){
 
-    if (isInShadow(intersectionPoint, light.position)) {
-        return color;
+        light = scene.point_lights[i];
+        if (isInShadow(intersectionPoint, light.position)) {
+            continue;
+        }
+
+        // Diffuse component
+        vec3f L = normalize(substractVectorsf(light.position, intersectionPoint)); // Incoming light direction
+        float distance = length(substractVectorsf(light.position, intersectionPoint)); // Distance to light
+        float cosThetaPrime = fmax(0.0, dot(L, normal)); // Cosine of the angle between light direction and normal
+        float diffuse = (material.diffuse.x * cosThetaPrime * light.intensity.x) / (distance * distance) / 255;
+        vec3f received_irradience;
+        received_irradience.x = light.intensity.x / (distance * distance);
+        received_irradience.y = light.intensity.y / (distance * distance);
+        received_irradience.z = light.intensity.z / (distance * distance);
+
+        color.x += material.diffuse.x * cosThetaPrime * received_irradience.x / 255;
+        color.y += material.diffuse.y * cosThetaPrime * received_irradience.x / 255;
+        color.z += material.diffuse.z * cosThetaPrime * received_irradience.x / 255;
+
+        // Specular component
+        vec3f w0 = normalize(substractVectorsf(scene.cameras[0].position, intersectionPoint));
+        vec3f h = normalize(addVectorsf(L, w0));
+        float cosAlphaPrime = fmax(0.0, dot(normal, h));
+
+        vec3f reflectDir = substractVectorsf(multiplicationScalarf(normal, 2 * dot(L, normal)), L);
+
+        float specular = powf(cosAlphaPrime, material.phong_exponent);
+        color.x += material.specular.x * specular * received_irradience.x / 255;
+        color.y += material.specular.y * specular * received_irradience.y / 255;
+        color.z += material.specular.z * specular * received_irradience.z / 255;
+
     }
 
-    // Diffuse component
-    vec3f L = normalize(substractVectorsf(light.position, intersectionPoint)); // Incoming light direction
-    float distance = length(substractVectorsf(light.position, intersectionPoint)); // Distance to light
-    float cosThetaPrime = fmax(0.0, dot(L, normal)); // Cosine of the angle between light direction and normal
-    float diffuse = (material.diffuse.x * cosThetaPrime * light.intensity.x) / (distance * distance) / 255;
-    vec3f received_irradience;
-    received_irradience.x = light.intensity.x / (distance * distance);
-    received_irradience.y = light.intensity.y / (distance * distance);
-    received_irradience.z = light.intensity.z / (distance * distance);
-
-    color.x += material.diffuse.x * cosThetaPrime * received_irradience.x / 255;
-    color.y += material.diffuse.y * cosThetaPrime * received_irradience.x / 255;
-    color.z += material.diffuse.z * cosThetaPrime * received_irradience.x / 255;
-
-    // Specular component
-    vec3f w0 = normalize(substractVectorsf(scene.cameras[0].position, intersectionPoint));
-    vec3f h = normalize(addVectorsf(L, w0));
-    float cosAlphaPrime = fmax(0.0, dot(normal, h));
-
-    vec3f reflectDir = substractVectorsf(multiplicationScalarf(normal, 2 * dot(L, normal)), L);
-
-    float specular = powf(cosAlphaPrime, material.phong_exponent);
-    color.x += material.specular.x * specular * received_irradience.x / 255;
-    color.y += material.specular.y * specular * received_irradience.y / 255;
-    color.z += material.specular.z * specular * received_irradience.z / 255;
-
-    // Ensure colors are clamped to avoid overflow
+    // range is in 0, 1
     color.x = std::min(1.0f, std::max(0.0f, color.x));
     color.y = std::min(1.0f, std::max(0.0f, color.y));
     color.z = std::min(1.0f, std::max(0.0f, color.z));
