@@ -236,6 +236,8 @@ float intersectTriangle(ray r, Triangle intersectedTriangle) {
 }
 
 // TO-DO: in case of some bugs, this shadow function should be checked because it is setting 0 to color if in the shadow 
+// TODO: maybe checking material type should work in shadow for efficiency
+
 // shadow part
 bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
     // Slightly offset the shadow ray to avoid self-intersection ("shadow acne")
@@ -421,8 +423,21 @@ vec3f computeColor(ray myRay, int depth) {
     
 }
 
+// Helper function to format time
+std::string formatTime(double seconds) {
+    int minutes = static_cast<int>(seconds / 60);
+    seconds -= minutes * 60;
+    
+    if (minutes > 0) {
+        return std::to_string(minutes) + " min " + std::to_string(static_cast<int>(seconds)) + "s";
+    } else {
+        return std::to_string(static_cast<int>(seconds)) + "s";
+    }
+}
+
 int main(int argc, char* argv[])
 {
+    // time measurement for total time
     auto start = std::chrono::high_resolution_clock::now();
 
     scene.loadFromXml(argv[1]);
@@ -471,17 +486,17 @@ int main(int argc, char* argv[])
         // write_ppm("test.ppm", image, width, height);
         delete[] image;
 
-        // End time measurement for the current camera
+        // end time measurement for the current camera
         auto camera_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> camera_elapsed_seconds = camera_end - camera_start;
-        printf("Elapsed time for camera -> %s: %.2f s\n", camera.image_name.c_str(), camera_elapsed_seconds.count());
-
+        std::cout << "Elapsed time for camera -> " << camera.image_name << ": " 
+                  << formatTime(camera_elapsed_seconds.count()) << "\n";
     }
 
     // end time measurement
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> total_elapsed_seconds = end - start;
-    printf("Total elapsed time: %.2f s\n", total_elapsed_seconds.count());
+    std::cout << "Total elapsed time: " << formatTime(total_elapsed_seconds.count()) << "\n";
 
     return 0;
 
