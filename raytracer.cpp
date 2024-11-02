@@ -423,6 +423,7 @@ vec3f computeColor(ray myRay, int depth) {
 
 int main(int argc, char* argv[])
 {
+    // time measurement for total time
     auto start = std::chrono::high_resolution_clock::now();
 
     scene.loadFromXml(argv[1]);
@@ -471,7 +472,7 @@ int main(int argc, char* argv[])
         // write_ppm("test.ppm", image, width, height);
         delete[] image;
 
-        // End time measurement for the current camera
+        // end time measurement for the current camera
         auto camera_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> camera_elapsed_seconds = camera_end - camera_start;
         printf("Elapsed time for camera -> %s: %.2f s\n", camera.image_name.c_str(), camera_elapsed_seconds.count());
