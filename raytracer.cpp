@@ -17,6 +17,7 @@ using Sphere = parser::Sphere;
 using Face = parser::Face;
 using Triangle = parser::Triangle;
 using Mesh = parser::Mesh;
+using Camera = parser::Camera;
 
 // Declare functions before usage
 vec3f multiplicationScalarf(vec3f a, float s);
@@ -45,10 +46,11 @@ int nx;
 int ny;
 vec3i backgroundColori;
 vec3f backgroundColor;
+Camera camera;
 
-void initializeCameraVectors() {
+void initializeCameraVectors(Camera camera) {
     // Here, we assume the scene has already been parsed
-    const auto& camera = scene.cameras[0];
+    // const auto& camera = scene.cameras[0];
 
     // initialize background color also
     backgroundColori = scene.background_color;
@@ -210,7 +212,8 @@ float intersectTriangle(ray r, Triangle intersectedTriangle) {
     vec3f h = cross(r.direction, edge2);
     float a = dot(edge1, h);
 
-    const float EPSILON = 1e-5;
+    // TODO: epsilon degeri hata payini ayarliyo aslinda bazi taranamayan ucgenler bu yuzden gozukmuyor olabilir.
+    const float EPSILON = 1e-7; // 1e-5 
     if (fabs(a) < EPSILON) return -1; // Ray is parallel to the triangle
 
     // Calculate f, s, u, v
@@ -230,55 +233,46 @@ float intersectTriangle(ray r, Triangle intersectedTriangle) {
     return (t > EPSILON) ? t : -1;
 }
 
-// mesh icin intersect fonksiyonu triangle'lari kullanarak bulunuyor
-float intersectMesh(ray r, Mesh mesh) {
-    float closestT = -1;
-    for (int i = 0; i < mesh.faces.size(); ++i) {
-        Face indices = mesh.faces[i];
-
-        Triangle tri;
-        tri.material_id = mesh.material_id;
-        tri.indices = indices;
-
-        float t = intersectTriangle(r, tri);
-        if (t > 0 && (closestT < 0 || t < closestT)) {
-            closestT = t;
-        }
-    }
-
-    return closestT;
-}
-
-
 // TO-DO: in case of some bugs, this shadow function should be checked because it is setting 0 to color if in the shadow 
 // shadow part
 bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
+    // Slightly offset the shadow ray to avoid self-intersection ("shadow acne")
     vec3f shadowRay = substractVectorsf(lightPosition, intersectionPoint);
     float distanceToLight = length(shadowRay);
     shadowRay = normalize(shadowRay);
 
+    // Small epsilon to avoid self-intersection
+    vec3f shadowRayOrigin = addVectorsf(intersectionPoint, multiplicationScalarf(shadowRay, scene.shadow_ray_epsilon));
+
     ray shadowRayStruct;
-    shadowRayStruct.origin = intersectionPoint;
+    shadowRayStruct.origin = shadowRayOrigin;
     shadowRayStruct.direction = shadowRay;
 
     for (int i = 0; i < scene.spheres.size(); i++) {
         float t = intersectSphere(shadowRayStruct, scene.spheres[i]);
         if (t > 0 && t < distanceToLight) {
-            return true; 
+            return true;
         }
     }
 
     for (int i = 0; i < scene.triangles.size(); i++) {
         float t = intersectTriangle(shadowRayStruct, scene.triangles[i]);
         if (t > 0 && t < distanceToLight) {
-            return true; 
+            return true;
         }
     }
 
     for (int i = 0; i < scene.meshes.size(); i++) {
-        float t = intersectMesh(shadowRayStruct, scene.meshes[i]);
-        if (t > 0 && t < distanceToLight) {
-            return true; 
+        Mesh mesh = scene.meshes[i];
+        for (const auto& face : mesh.faces) {
+            Triangle tri;
+            tri.material_id = mesh.material_id;
+            tri.indices = face;
+
+            float t = intersectTriangle(shadowRayStruct, tri);
+            if (t > 0 && t < distanceToLight) {
+                return true;
+            }
         }
     }
 
@@ -288,55 +282,49 @@ bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
 // Phong shading function
 vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray myRay, int depth) {
     vec3f color = {0, 0, 0};
-    
-    Material material = scene.materials[materialId-1];
+    Material material = scene.materials[materialId - 1];
 
+    // Ambient component
     vec3f ambientLight = scene.ambient_light;
-    // ambient component
     color.x += material.ambient.x * ambientLight.x / 255;
     color.y += material.ambient.y * ambientLight.y / 255;
     color.z += material.ambient.z * ambientLight.z / 255;
 
-    // printf("ambientlight.x= %.2f\n", ambientLight.x);
-    PointLight light;
-    for (int i = 0; i < scene.point_lights.size(); i++){
+    // Loop over all point lights
+    // printf("start\n");
+    for (const auto &light : scene.point_lights) {
 
-        light = scene.point_lights[i];
         if (isInShadow(intersectionPoint, light.position)) {
             continue;
         }
-
+        // printf("light_positionx: %f\n", light.position.x);
         // Diffuse component
-        vec3f L = normalize(substractVectorsf(light.position, intersectionPoint)); // Incoming light direction
-        float distance = length(substractVectorsf(light.position, intersectionPoint)); // Distance to light
-        float cosThetaPrime = fmax(0.0, dot(L, normal)); // Cosine of the angle between light direction and normal
-        // float diffuse = (material.diffuse.x * cosThetaPrime * light.intensity.x) / (distance * distance) / 255;
-        vec3f received_irradience;
-        received_irradience.x = light.intensity.x / (distance * distance);
-        received_irradience.y = light.intensity.y / (distance * distance);
-        received_irradience.z = light.intensity.z / (distance * distance);
+        vec3f L = normalize(substractVectorsf(light.position, intersectionPoint)); // Light direction
+        float distance = length(substractVectorsf(light.position, intersectionPoint));
+        float cosTheta = fmax(0.0f, dot(L, normal));
 
-        color.x += material.diffuse.x * cosThetaPrime * received_irradience.x / 255;
-        color.y += material.diffuse.y * cosThetaPrime * received_irradience.y / 255;
-        color.z += material.diffuse.z * cosThetaPrime * received_irradience.z / 255;
+        vec3f received_irradiance;
+        received_irradiance.x = light.intensity.x / (distance * distance);
+        received_irradiance.y = light.intensity.y / (distance * distance);
+        received_irradiance.z = light.intensity.z / (distance * distance);
+
+        color.x += material.diffuse.x * cosTheta * received_irradiance.x / 255;
+        color.y += material.diffuse.y * cosTheta * received_irradiance.y / 255;
+        color.z += material.diffuse.z * cosTheta * received_irradiance.z / 255;
 
         // Specular component
-        vec3f w0 = normalize(substractVectorsf(scene.cameras[0].position, intersectionPoint));
-        vec3f h = normalize(addVectorsf(L, w0));
-        float cosAlphaPrime = fmax(0.0, dot(normal, h));
+        vec3f viewDir = normalize(substractVectorsf(camera.position, intersectionPoint)); // scene.cameras[0].position
+        vec3f halfDir = normalize(addVectorsf(L, viewDir));
+        float cosAlpha = fmax(0.0f, dot(normal, halfDir));
+        float specular = powf(cosAlpha, material.phong_exponent);
 
-        vec3f reflectDir = substractVectorsf(multiplicationScalarf(normal, 2 * dot(L, normal)), L);
-
-        float specular = powf(cosAlphaPrime, material.phong_exponent);
-        color.x += material.specular.x * specular * received_irradience.x / 255;
-        color.y += material.specular.y * specular * received_irradience.y / 255;
-        color.z += material.specular.z * specular * received_irradience.z / 255;
-
+        color.x += material.specular.x * specular * received_irradiance.x / 255;
+        color.y += material.specular.y * specular * received_irradiance.y / 255;
+        color.z += material.specular.z * specular * received_irradiance.z / 255;
     }
 
-    // reflect ray baslangic konumu ilk nokta
-
-    if (material.is_mirror) {
+    // Reflection component
+    if (material.is_mirror && depth > 0) {
         vec3f reflectionDir = substractVectorsf(myRay.direction, multiplicationScalarf(normal, 2 * dot(myRay.direction, normal)));
         reflectionDir = normalize(reflectionDir);
 
@@ -344,17 +332,13 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
         reflectionRay.origin = addVectorsf(intersectionPoint, multiplicationScalarf(reflectionDir, scene.shadow_ray_epsilon));
         reflectionRay.direction = reflectionDir;
 
-        
-        vec3f reflectedColor = computeColor(reflectionRay, depth-1);
-
-        if (reflectedColor.x <= 1 || reflectedColor.y <= 1 || reflectedColor.z <= 1){
-            color.x += material.mirror.x * reflectedColor.x;
-            color.y += material.mirror.y * reflectedColor.y;
-            color.z += material.mirror.z * reflectedColor.z;
-        }
+        vec3f reflectedColor = computeColor(reflectionRay, depth - 1);
+        color.x += material.mirror.x * reflectedColor.x;
+        color.y += material.mirror.y * reflectedColor.y;
+        color.z += material.mirror.z * reflectedColor.z;
     }
 
-    // range is in 0, 1
+    // Clamp color values to [0, 1]
     color.x = std::min(1.0f, std::max(0.0f, color.x));
     color.y = std::min(1.0f, std::max(0.0f, color.y));
     color.z = std::min(1.0f, std::max(0.0f, color.z));
@@ -362,156 +346,122 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
     return color;
 }
 
-int minSphereI, minTriangleI, minMeshI;
-vec3f computeColor (ray myRay, int depth) {
+vec3f computeColor(ray myRay, int depth) {
+    if (depth <= 0) {
+        return {scene.background_color.x / 255.0f, scene.background_color.y / 255.0f, scene.background_color.z / 255.0f};
+    }
 
-    if (depth<=0) return {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
+    float minT = std::numeric_limits<float>::max(); // float minT = 9999999.9
 
-    int i;
-    vec3f c;
-    float minT_sphere = 90000; // some large number
-    float minT_triangle = 90000;
-    float minT_mesh = 90000;
-    float t_sphere, t_triangle, t_mesh;
-    vec3f L, N, P;
+    vec3f intersectionPoint, normal;
+    int materialId = -1;
+    bool hasIntersection = false;
 
-    c = {backgroundColor.x / 255, backgroundColor.y / 255, backgroundColor.z / 255};
-    // printf("c: %f, background color: %d\n", c.x, scene.background_color.x);
-
-    minSphereI = -1;
-    minTriangleI = -1;
-    minMeshI = -1;
-
-    for (i=0; i<scene.spheres.size(); i++) {
-
-        t_sphere = intersectSphere(myRay, scene.spheres[i]);
-
-        if (t_sphere<minT_sphere && t_sphere>=0.001) {
-
-            Sphere sphere = scene.spheres[i];
-
-            minT_sphere = t_sphere;
-            minSphereI = i;
+    // sphere intersection
+    for (int i = 0; i < scene.spheres.size(); i++) {
+        float t = intersectSphere(myRay, scene.spheres[i]);
+        if (t < minT && t >= 0.001) {
+            minT = t;
+            intersectionPoint = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, t));
+            normal = normalize(substractVectorsf(intersectionPoint, scene.vertex_data[scene.spheres[i].center_vertex_id - 1]));
+            materialId = scene.spheres[i].material_id;
+            hasIntersection = true;
         }
     }
 
-    for (i = 0; i < scene.triangles.size(); i++) {
-        t_triangle = intersectTriangle(myRay, scene.triangles[i]);
+    // triangle intersection
+    for (int i = 0; i < scene.triangles.size(); i++) {
+        float t = intersectTriangle(myRay, scene.triangles[i]);
+        if (t < minT && t >= 0.001) {
+            minT = t;
+            intersectionPoint = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, t));
 
-        if (t_triangle < minT_triangle && t_triangle >= 0.001) {
-            minT_triangle = t_triangle;
-            minTriangleI = i;
+            vec3f v0 = scene.vertex_data[scene.triangles[i].indices.v0_id - 1];
+            vec3f v1 = scene.vertex_data[scene.triangles[i].indices.v1_id - 1];
+            vec3f v2 = scene.vertex_data[scene.triangles[i].indices.v2_id - 1];
+            normal = normalize(cross(substractVectorsf(v1, v0), substractVectorsf(v2, v0)));
+            materialId = scene.triangles[i].material_id;
+            hasIntersection = true;
         }
     }
 
-    for (i = 0; i < scene.meshes.size(); i++) {
-        t_mesh = intersectMesh(myRay, scene.meshes[i]);
+    // mesh intersection
+    for (int i = 0; i < scene.meshes.size(); i++) {
+        Mesh mesh = scene.meshes[i];
+        
+        for (const auto& face : mesh.faces) {
+            vec3f v0 = scene.vertex_data[face.v0_id - 1];
+            vec3f v1 = scene.vertex_data[face.v1_id - 1];
+            vec3f v2 = scene.vertex_data[face.v2_id - 1];
+            Triangle tri;
+            tri.material_id = mesh.material_id;
+            tri.indices = face;
+            float t = intersectTriangle(myRay, tri);
 
-        if (t_mesh < minT_mesh && t_mesh >= 0.001) {
-            minT_mesh = t_mesh;
-            minMeshI = i;
+            if (t >= 0.001 && t < minT) {
+                minT = t;
+                intersectionPoint = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, t));
+                
+                // Calculate the normal at the intersection point
+                normal = normalize(cross(substractVectorsf(v1, v0), substractVectorsf(v2, v0)));
+                materialId = mesh.material_id;
+                hasIntersection = true;
+            }
         }
     }
 
-    if (minSphereI != -1 && (minT_sphere < minT_triangle || minTriangleI == -1) && (minT_sphere < minT_mesh || minMeshI == -1)) {
-        Sphere sphere = scene.spheres[minSphereI];
-        vec3f sphereColor = {0, 0, 0};
-
-        // printf("spherecolor.x = %f, .y = %f, .z = %f\n", sphereColor.x, sphereColor.y, sphereColor.z);
-
-        // intersection point P
-        vec3f P = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, minT_sphere));
-
-        // light direction vector L
-        vec3f L = substractVectorsf(scene.point_lights[0].position, P);
-        L = normalize(L);
-
-        // normal vector N at the intersection point
-        vec3f N = substractVectorsf(P, scene.vertex_data[sphere.center_vertex_id-1]);
-        N = normalize(N);
-
-        c = calculateColor(sphere.material_id, P, N, myRay, depth);
+    // calculate the color
+    if (hasIntersection) {
+        return calculateColor(materialId, intersectionPoint, normal, myRay, depth);
     }
+
+    return {scene.background_color.x / 255.0f, scene.background_color.y / 255.0f, scene.background_color.z / 255.0f};
     
-    else if (minTriangleI != -1 && (minT_triangle < minT_mesh || minMeshI == -1)) {
-        Triangle triangle = scene.triangles[minTriangleI];
-
-        P = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, minT_triangle));
-
-        L = substractVectorsf(scene.point_lights[0].position, P);
-        L = normalize(L);
-
-        vec3f v0 = scene.vertex_data[triangle.indices.v0_id - 1];
-        vec3f v1 = scene.vertex_data[triangle.indices.v1_id - 1];
-        vec3f v2 = scene.vertex_data[triangle.indices.v2_id - 1];
-        vec3f edge1 = substractVectorsf(v1, v0);
-        vec3f edge2 = substractVectorsf(v2, v0);
-        N = normalize(cross(edge1, edge2));
-
-        c = calculateColor(triangle.material_id, P, N, myRay, depth);
-    }
-
-    else if (minMeshI != -1) {
-        Mesh mesh = scene.meshes[minMeshI];
-
-        P = addVectorsf(myRay.origin, multiplicationScalarf(myRay.direction, minT_mesh));
-
-        L = substractVectorsf(scene.point_lights[0].position, P);
-        L = normalize(L);
-
-        Face closestFace = mesh.faces[minMeshI];
-        vec3f v0 = scene.vertex_data[closestFace.v0_id - 1];
-        vec3f v1 = scene.vertex_data[closestFace.v1_id - 1];
-        vec3f v2 = scene.vertex_data[closestFace.v2_id - 1];
-        vec3f edge1 = substractVectorsf(v1, v0);
-        vec3f edge2 = substractVectorsf(v2, v0);
-        N = normalize(cross(edge1, edge2));
-
-        c = calculateColor(mesh.material_id, P, N, myRay, depth);
-    }
-    // printf(" asagida c: %f, background color: %d\n", c.x, scene.background_color.x);
-
-    return c;
 }
-
 
 int main(int argc, char* argv[])
 {
     scene.loadFromXml(argv[1]);
-    // printf("sphere[0] material id: %d, material: %f\n", scene.spheres[0].material_id, scene.materials[scene.spheres[0].material_id-1].ambient.x);
-    // printf("%f\n", scene.vertex_data[0].x);
-    // printf("%zu \n", scene.spheres.size());
-    initializeCameraVectors();
 
-    unsigned char* image = new unsigned char [width * height * 3];
-    
-    int countPixel = 0; // for writing ppm in the image side
+    // printf("%zu\n", scene.cameras.size());
 
-    // ray tracing loop
-    for (int j = 0; j < height; ++j)
-    {
-        for (int i = 0; i < width; ++i)
+    for (int k = 0; k <= scene.cameras.size()-1; k++) {
+
+        // printf("%d\n", k);
+        camera = scene.cameras[k];
+        initializeCameraVectors(camera);
+
+        unsigned char* image = new unsigned char [width * height * 3];
+        
+        int countPixel = 0; // for writing ppm in the image side
+
+        // ray tracing loop
+        for (int j = 0; j < height; ++j)
         {
-            // treat i as column value, j as row value 
-            ray generatedRay = generateRay(i, j);
-            
-            vec3f pixel;
-            pixel = addVectorsf(generatedRay.origin, generatedRay.direction);
-            
-            vec3f rayColor;
-            rayColor = computeColor(generatedRay, scene.max_recursion_depth);
-            // if (rayColor.x > 0.0) printf("raycolors: %f %f %f \n", rayColor.x, rayColor.y, rayColor.z);
-            
-            image[countPixel++] = (int)(rayColor.x*255+0.5);
-            image[countPixel++] = (int)(rayColor.y*255+0.5);
-            image[countPixel++] = (int)(rayColor.z*255+0.5);
+            for (int i = 0; i < width; ++i)
+            {
+                // treat i as column value, j as row value 
+                ray generatedRay = generateRay(i, j);
+                
+                vec3f pixel;
+                pixel = addVectorsf(generatedRay.origin, generatedRay.direction);
+                
+                vec3f rayColor;
+                rayColor = computeColor(generatedRay, scene.max_recursion_depth);
+                // if (rayColor.x > 0.0) printf("raycolors: %f %f %f \n", rayColor.x, rayColor.y, rayColor.z);
+                
+                image[countPixel++] = (int)(rayColor.x*255+0.5);
+                image[countPixel++] = (int)(rayColor.y*255+0.5);
+                image[countPixel++] = (int)(rayColor.z*255+0.5);
 
-            // printf("pixels: %.4f %.4f %.4f \n", pixel.x, pixel.y, pixel.z);
+                // printf("pixels: %.4f %.4f %.4f \n", pixel.x, pixel.y, pixel.z);
 
+            }
         }
+        
+        // printf("%s\n", camera.image_name.c_str());
+        write_ppm(camera.image_name.c_str(), image, width, height);
+        // write_ppm("test.ppm", image, width, height);
     }
-
-    write_ppm(scene.cameras[0].image_name.c_str(), image, width, height);
-    // write_ppm("test.ppm", image, width, height);
 
 }
