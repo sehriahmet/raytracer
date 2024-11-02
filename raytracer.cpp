@@ -474,14 +474,14 @@ int main(int argc, char* argv[])
         // End time measurement for the current camera
         auto camera_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> camera_elapsed_seconds = camera_end - camera_start;
-        printf("Elapsed time for camera -> %s: %.4f s\n", camera.image_name.c_str(), camera_elapsed_seconds.count());
+        printf("Elapsed time for camera -> %s: %.2f s\n", camera.image_name.c_str(), camera_elapsed_seconds.count());
 
     }
 
     // end time measurement
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> total_elapsed_seconds = end - start;
-    printf("Total elapsed time: %.4f s\n", total_elapsed_seconds.count());
+    printf("Total elapsed time: %.2f s\n", total_elapsed_seconds.count());
 
     return 0;
 
