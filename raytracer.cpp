@@ -17,6 +17,7 @@ using Sphere = parser::Sphere;
 using Face = parser::Face;
 using Triangle = parser::Triangle;
 using Mesh = parser::Mesh;
+using Camera = parser::Camera;
 
 // Declare functions before usage
 vec3f multiplicationScalarf(vec3f a, float s);
@@ -45,10 +46,11 @@ int nx;
 int ny;
 vec3i backgroundColori;
 vec3f backgroundColor;
+Camera camera;
 
-void initializeCameraVectors() {
+void initializeCameraVectors(Camera camera) {
     // Here, we assume the scene has already been parsed
-    const auto& camera = scene.cameras[0];
+    // const auto& camera = scene.cameras[0];
 
     // initialize background color also
     backgroundColori = scene.background_color;
@@ -311,7 +313,7 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
         color.z += material.diffuse.z * cosTheta * received_irradiance.z / 255;
 
         // Specular component
-        vec3f viewDir = normalize(substractVectorsf(scene.cameras[0].position, intersectionPoint));
+        vec3f viewDir = normalize(substractVectorsf(camera.position, intersectionPoint)); // scene.cameras[0].position
         vec3f halfDir = normalize(addVectorsf(L, viewDir));
         float cosAlpha = fmax(0.0f, dot(normal, halfDir));
         float specular = powf(cosAlpha, material.phong_exponent);
@@ -417,43 +419,49 @@ vec3f computeColor(ray myRay, int depth) {
     
 }
 
-
-
-
 int main(int argc, char* argv[])
 {
     scene.loadFromXml(argv[1]);
-    initializeCameraVectors();
 
-    unsigned char* image = new unsigned char [width * height * 3];
-    
-    int countPixel = 0; // for writing ppm in the image side
+    // printf("%zu\n", scene.cameras.size());
 
-    // ray tracing loop
-    for (int j = 0; j < height; ++j)
-    {
-        for (int i = 0; i < width; ++i)
+    for (int k = 0; k <= scene.cameras.size()-1; k++) {
+
+        // printf("%d\n", k);
+        camera = scene.cameras[k];
+        initializeCameraVectors(camera);
+
+        unsigned char* image = new unsigned char [width * height * 3];
+        
+        int countPixel = 0; // for writing ppm in the image side
+
+        // ray tracing loop
+        for (int j = 0; j < height; ++j)
         {
-            // treat i as column value, j as row value 
-            ray generatedRay = generateRay(i, j);
-            
-            vec3f pixel;
-            pixel = addVectorsf(generatedRay.origin, generatedRay.direction);
-            
-            vec3f rayColor;
-            rayColor = computeColor(generatedRay, scene.max_recursion_depth);
-            // if (rayColor.x > 0.0) printf("raycolors: %f %f %f \n", rayColor.x, rayColor.y, rayColor.z);
-            
-            image[countPixel++] = (int)(rayColor.x*255+0.5);
-            image[countPixel++] = (int)(rayColor.y*255+0.5);
-            image[countPixel++] = (int)(rayColor.z*255+0.5);
+            for (int i = 0; i < width; ++i)
+            {
+                // treat i as column value, j as row value 
+                ray generatedRay = generateRay(i, j);
+                
+                vec3f pixel;
+                pixel = addVectorsf(generatedRay.origin, generatedRay.direction);
+                
+                vec3f rayColor;
+                rayColor = computeColor(generatedRay, scene.max_recursion_depth);
+                // if (rayColor.x > 0.0) printf("raycolors: %f %f %f \n", rayColor.x, rayColor.y, rayColor.z);
+                
+                image[countPixel++] = (int)(rayColor.x*255+0.5);
+                image[countPixel++] = (int)(rayColor.y*255+0.5);
+                image[countPixel++] = (int)(rayColor.z*255+0.5);
 
-            // printf("pixels: %.4f %.4f %.4f \n", pixel.x, pixel.y, pixel.z);
+                // printf("pixels: %.4f %.4f %.4f \n", pixel.x, pixel.y, pixel.z);
 
+            }
         }
+        
+        // printf("%s\n", camera.image_name.c_str());
+        write_ppm(camera.image_name.c_str(), image, width, height);
+        // write_ppm("test.ppm", image, width, height);
     }
-
-    write_ppm(scene.cameras[0].image_name.c_str(), image, width, height);
-    // write_ppm("test.ppm", image, width, height);
 
 }
