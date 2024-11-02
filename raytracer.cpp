@@ -6,6 +6,8 @@
 #include <cmath>
 #include <algorithm>
 
+#include <chrono> // for measuring time
+
 parser::Scene scene;
 
 using vec3f = parser::Vec3f;
@@ -421,6 +423,8 @@ vec3f computeColor(ray myRay, int depth) {
 
 int main(int argc, char* argv[])
 {
+    auto start = std::chrono::high_resolution_clock::now();
+
     scene.loadFromXml(argv[1]);
 
     // printf("%zu\n", scene.cameras.size());
@@ -462,6 +466,16 @@ int main(int argc, char* argv[])
         // printf("%s\n", camera.image_name.c_str());
         write_ppm(camera.image_name.c_str(), image, width, height);
         // write_ppm("test.ppm", image, width, height);
+        delete[] image;
     }
+
+    // end time measurement
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // calculate duration in seconds
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cout << "Elapsed time: " << elapsed_seconds.count() << "s\n";
+
+    return 0;
 
 }
