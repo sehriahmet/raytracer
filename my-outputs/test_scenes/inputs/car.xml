@@ -49,7 +49,7 @@
 				3
 			</NearDistance>
 			<ImageResolution>
-				1024 768
+				100 75
 			</ImageResolution>
 			<ImageName>
 				Car_front.ppm
