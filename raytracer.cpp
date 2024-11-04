@@ -328,7 +328,7 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
     }
 
     // Reflection component
-    if (material.is_mirror && depth > 0) {
+    if (material.is_mirror && depth >= 0) {
         vec3f reflectionDir = substractVectorsf(myRay.direction, multiplicationScalarf(normal, 2 * dot(myRay.direction, normal)));
         reflectionDir = normalize(reflectionDir);
 
@@ -351,7 +351,7 @@ vec3f calculateColor(int materialId, vec3f intersectionPoint, vec3f normal, ray 
 }
 
 vec3f computeColor(ray myRay, int depth) {
-    if (depth <= 0) {
+    if (depth < 0) {
         return {scene.background_color.x / 255.0f, scene.background_color.y / 255.0f, scene.background_color.z / 255.0f};
     }
 
@@ -426,9 +426,13 @@ vec3f computeColor(ray myRay, int depth) {
 // Helper function to format time
 std::string formatTime(double seconds) {
     int minutes = static_cast<int>(seconds / 60);
+    int hours = static_cast<int>(minutes / 60);
     seconds -= minutes * 60;
+    minutes -= hours * 60;
     
-    if (minutes > 0) {
+    if (hours > 0) {
+        return std::to_string(hours) + " h " + std::to_string(minutes) + " min " + std::to_string(static_cast<int>(seconds)) + "s";
+    } else if (minutes > 0) {
         return std::to_string(minutes) + " min " + std::to_string(static_cast<int>(seconds)) + "s";
     } else {
         return std::to_string(static_cast<int>(seconds)) + "s";
