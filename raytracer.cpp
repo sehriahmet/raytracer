@@ -2,11 +2,8 @@
 #include "parser.h"
 #include "ppm.h"
 
-#include <math.h>
 #include <cmath>
 #include <algorithm>
-
-#include <chrono> // for measuring time
 
 parser::Scene scene;
 
@@ -36,7 +33,6 @@ typedef struct {
 
 vec3f computeColor(ray r, int depth);
 
-// burada ilk camera elementini aldim ama birden fazl aoldugu case'i sonradan yapmak lazim
 // Main function or initialization section
 
 vec4f nearPlane; // left, right, bottom, top
@@ -151,7 +147,7 @@ ray generateRay (int i, int j) {
 
     vec3f m, q, s;
 
-    // m ve q generateRay disina alinabilir.
+    // m and q can be taken out of the function generateRay.
     m = addVectorsf(e, multiplicationScalarf(gaze, dist)); // middle point of the near plane 
     q = addVectorsf(m, addVectorsf(multiplicationScalarf(upVectoru, nearPlane.x), multiplicationScalarf(upVectorv, nearPlane.w))); // q = m + lu + tv // top-left corner
     s = addVectorsf(q, addVectorsf(multiplicationScalarf(upVectoru, su), multiplicationScalarf(upVectorv,-sv))); // pixel position
@@ -169,10 +165,9 @@ float intersectSphere (ray r, Sphere s) {
 
     vec3f c;
 
-    // burada sphere vertex id'den cikarip bulmak gerekiyo
     c = scene.vertex_data[s.center_vertex_id-1];
 
-    // printf("scene vertex datadan alinanlar: %d %f %f %f \n", s.center_vertex_id, c.x, c.y ,c.z);
+    // printf("datas from scene vertex data: %d %f %f %f \n", s.center_vertex_id, c.x, c.y ,c.z);
     float t, t1, t2;
 
     C = (r.origin.x - c.x)*(r.origin.x- c.x) + (r.origin.y - c.y)*(r.origin.y- c.y) + (r.origin.z - c.z)*(r.origin.z- c.z) - s.radius*s.radius;
@@ -199,53 +194,47 @@ float intersectSphere (ray r, Sphere s) {
     return t;
 }
 
-// Function to check intersection of a ray with a triangle using barycentric coordinates
 float intersectTriangle(ray r, Triangle intersectedTriangle) {
-    // Retrieve triangle vertices from the scene's vertex data
+    // triangle vertices
     vec3f v0 = scene.vertex_data[intersectedTriangle.indices.v0_id - 1];
     vec3f v1 = scene.vertex_data[intersectedTriangle.indices.v1_id - 1];
     vec3f v2 = scene.vertex_data[intersectedTriangle.indices.v2_id - 1];
 
-    // Calculate the edges of the triangle
+    // edges of the triangle
     vec3f edge1 = substractVectorsf(v1, v0);
     vec3f edge2 = substractVectorsf(v2, v0);
 
-    // Calculate the normal and determinant for the plane intersection
+    // normal and determinant for the plane intersection
     vec3f h = cross(r.direction, edge2);
     float a = dot(edge1, h);
 
-    // TODO: epsilon degeri hata payini ayarliyo aslinda bazi taranamayan ucgenler bu yuzden gozukmuyor olabilir.
     const float EPSILON = 1e-7; // 1e-5 
-    if (fabs(a) < EPSILON) return -1; // Ray is parallel to the triangle
+    if (fabs(a) < EPSILON) return -1; // ray is parallel to the triangle
 
     // Calculate f, s, u, v
     float f = 1.0 / a;
     vec3f s = substractVectorsf(r.origin, v0);
     float u = f * dot(s, h);
-    if (u < 0.0 || u > 1.0) return -1; // Intersection outside the triangle
+    if (u < 0.0 || u > 1.0) return -1;
 
     vec3f q = cross(s, edge1);
     float v = f * dot(r.direction, q);
-    if (v < 0.0 || u + v > 1.0) return -1; // Intersection outside the triangle
+    if (v < 0.0 || u + v > 1.0) return -1;
 
-    // Calculate t to determine the intersection point distance
+    // determine the intersection point distance
     float t = f * dot(edge2, q);
 
-    // Valid intersection if t is positive
+    // check if t is positive
     return (t > EPSILON) ? t : -1;
 }
 
-// TO-DO: in case of some bugs, this shadow function should be checked because it is setting 0 to color if in the shadow 
-// TODO: maybe checking material type should work in shadow for efficiency
-
 // shadow part
 bool isInShadow(vec3f intersectionPoint, vec3f lightPosition) {
-    // Slightly offset the shadow ray to avoid self-intersection ("shadow acne")
+
     vec3f shadowRay = substractVectorsf(lightPosition, intersectionPoint);
     float distanceToLight = length(shadowRay);
     shadowRay = normalize(shadowRay);
 
-    // Small epsilon to avoid self-intersection
     vec3f shadowRayOrigin = addVectorsf(intersectionPoint, multiplicationScalarf(shadowRay, scene.shadow_ray_epsilon));
 
     ray shadowRayStruct;
@@ -423,35 +412,14 @@ vec3f computeColor(ray myRay, int depth) {
     
 }
 
-// Helper function to format time
-std::string formatTime(double seconds) {
-    int minutes = static_cast<int>(seconds / 60);
-    int hours = static_cast<int>(minutes / 60);
-    seconds -= minutes * 60;
-    minutes -= hours * 60;
-    
-    if (hours > 0) {
-        return std::to_string(hours) + " h " + std::to_string(minutes) + " min " + std::to_string(static_cast<int>(seconds)) + "s";
-    } else if (minutes > 0) {
-        return std::to_string(minutes) + " min " + std::to_string(static_cast<int>(seconds)) + "s";
-    } else {
-        return std::to_string(static_cast<int>(seconds)) + "s";
-    }
-}
-
 int main(int argc, char* argv[])
 {
-    // time measurement for total time
-    auto start = std::chrono::high_resolution_clock::now();
 
     scene.loadFromXml(argv[1]);
 
     // printf("%zu\n", scene.cameras.size());
 
     for (int k = 0; k <= scene.cameras.size()-1; k++) {
-
-        // time measurement for the current camera
-        auto camera_start = std::chrono::high_resolution_clock::now();
 
         // printf("%d\n", k);
         camera = scene.cameras[k];
@@ -490,17 +458,7 @@ int main(int argc, char* argv[])
         // write_ppm("test.ppm", image, width, height);
         delete[] image;
 
-        // end time measurement for the current camera
-        auto camera_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> camera_elapsed_seconds = camera_end - camera_start;
-        std::cout << "Elapsed time for camera -> " << camera.image_name << ": " 
-                  << formatTime(camera_elapsed_seconds.count()) << "\n";
     }
-
-    // end time measurement
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> total_elapsed_seconds = end - start;
-    std::cout << "Total elapsed time: " << formatTime(total_elapsed_seconds.count()) << "\n";
 
     return 0;
 
